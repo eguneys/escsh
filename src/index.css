@@ -1,0 +1,21 @@
+.es-wrap {
+}
+
+.omove,
+.tmove,
+.cmove {
+  margin-left: 0.5em;
+}
+
+.move {
+  margin-left: 0.2em;
+}
+
+.zeroturn {
+  margin-left: 0.2em;
+}
+
+span.line,
+linefen {
+  display: none;
+}
