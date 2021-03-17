@@ -1,4 +1,5 @@
 import './index.css';
+import './notation.css';
 
 export { default } from './main';
 

@@ -1,7 +1,8 @@
 import { h, init } from 'hhh';
 import chers from 'chers';
 
-import view from './view';
+import View from './view';
+import codes from './codes';
 
 type Config = {
   md?: string
@@ -16,7 +17,9 @@ export default function app(element: Element, opts: Config) {
   if (md) {
     let mc = chers(md);
 
-    let vnode = view(mc);
+    let view = new View(codes(mc));
+
+    let vnode = view.vMContent(mc);
 
     let $_ = recons(vnode);
 
