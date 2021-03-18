@@ -5,7 +5,8 @@
   "license": "MIT",
   "scripts": {
     "start": "webpack serve --open",
-    "build": "webpack"
+    "watch": "tsc --watch",
+    "build": "yarn rm -rf lib && tsc"
   },
   "devDependencies": {
     "css-loader": "^5.1.1",

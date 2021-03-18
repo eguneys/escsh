@@ -1,29 +1,24 @@
+import { tt, mt } from 'chers';
+
 import { h, init } from 'hhh';
-import chers from 'chers';
 
+import { Config } from './config';
 import View from './view';
-import codes from './codes';
-
-type Config = {
-  md?: string
-}
+import Ctrl from './ctrl';
 
 export default function app(element: Element, opts: Config) {
 
   let recons = init();
 
-  let { md } = opts;
-  
-  if (md) {
-    let mc = chers(md);
+  let ctrl = new Ctrl(opts);
 
-    let view = new View(codes(mc));
-
-    let vnode = view.vMContent(mc);
-
-    let $_ = recons(vnode);
-
+  ctrl.subContent.sub(content => {
+    let view = new View(ctrl, content);
+    let $_ = recons(view.v$_);
+    ctrl.subRecons.trigger();
     element.appendChild($_);
-  }
+  });
+
+  ctrl.subContent.trigger();
   
 }

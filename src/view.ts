@@ -1,18 +1,55 @@
+import { l as cl, path } from 'cchheess';
 import { h, VNode } from 'hhh';
 import { tt, mt } from 'chers';
-import { l as cl, path } from 'cchheess';
 import * as codes from './codes';
+import Ctrl from './ctrl';
+import { Sub } from './util';
+import ssehC from 'ssehc';
 
 type LineAndParent = [mt.Line] | [mt.Line, mt.Line]
 
+export function fTranslateAbs(elm: HTMLElement, pos: [number, number]) {
+  elm.style.transform = `translate(${pos[0]}px,${pos[1]}px)`;
+}
+
+function isInViewport(bounds: ClientRect) {
+  return bounds.top >= 0 &&
+    bounds.left >= 0 &&
+    bounds.bottom <= window.innerHeight &&
+    bounds.right <= window.innerWidth;
+}
+
+function listenEndScroll(onEndScroll: () => void) {
+  let isScrolling: number;
+  document.addEventListener('scroll', function(event) {
+    clearTimeout(isScrolling);
+    isScrolling = window.setTimeout(() => onEndScroll(), 60);
+  }, false);
+}
+
 export default class View {
 
-  errs: codes.ErrMap
-  line: tt.Maybe<cl.Line>
+  v$_!: VNode
+  v$hoverBoard!: VNode
+  vs$board: VNode[]
+  v$visibleBoard!: tt.Maybe<VNode>
+  ctrl: Ctrl
 
-  constructor(lineAndErrors: [codes.ErrMap, tt.Maybe<cl.Line>]) {
-    this.errs = lineAndErrors[0];
-    this.line = lineAndErrors[1];
+  constructor(ctrl: Ctrl, content: tt.Maybe<mt.Content>){
+    this.ctrl = ctrl;
+    this.vs$board = [];
+    this.vMContent(content);
+
+    this.ctrl.subRecons.sub(() => {
+      listenEndScroll(this.findVisiblePly.bind(this));
+      this.findVisiblePly();
+    });
+  }
+
+  findVisiblePly() {
+    this.v$visibleBoard = this.vs$board
+      .find(_ =>
+        isInViewport((_.elm as HTMLElement).getBoundingClientRect()));
   }
 
   vDiv(): VNode {
@@ -74,8 +111,8 @@ export default class View {
   }
 
   vMove(ply: number, { move }: mt.Move, lp: LineAndParent): VNode {
-    let bn = this.line?.ply(lp[0].line, ply);
-    let err = this.errs.get(ply);
+    let bn = this.ctrl.line?.ply(lp[0].line, ply);
+    let err = this.ctrl.errs.get(ply);
 
     if (!bn) {
       let _err = err ? err : 'No initial situation';
@@ -103,9 +140,58 @@ export default class View {
                 this.vGlyphs(move[1])]);
 
     } else {
-      return h('span.move',
-               [this.vSanString(bn.view.san),
-                this.vGlyphs(move[1])]);
+      let v$res = h('span.move',
+                  [this.vSanString(bn.view.san),
+                   this.vGlyphs(move[1])]);
+
+      let moveView = bn.view;
+
+      this.ctrl.subRecons.sub(() => {
+        let $res = v$res.elm as HTMLElement,
+        $hoverBoard = this.v$hoverBoard.elm as HTMLElement,
+        $_ = this.v$_.elm as HTMLElement;
+
+        ['mouseover', 'touchstart'].forEach(_ => {
+          $res.addEventListener(_, () => {
+
+            let posToTranslate: [number, number] = 
+              [window.pageXOffset, window.pageYOffset];
+
+            if (this.v$visibleBoard) {
+              let bounds = (this.v$visibleBoard.elm as HTMLElement)
+                             .getBoundingClientRect();
+              posToTranslate[0] += bounds.left;
+              posToTranslate[1] += bounds.top;
+            } else {
+              let { clientWidth } = $_;
+
+              let offBounds = $res.getBoundingClientRect();
+              let helBounds = $hoverBoard.getBoundingClientRect();
+
+              if (offBounds.left < clientWidth / 2) {
+                posToTranslate[0] += clientWidth - helBounds.width - 4;
+              }
+            }
+
+            fTranslateAbs($hoverBoard, posToTranslate);
+            
+            this.ctrl.hover(moveView);
+            
+          });
+        });
+        ['mouseleave', 'touchend'].forEach(_ => {
+          $res.addEventListener(_, () => {
+            this.ctrl.unHover();
+          });
+        });
+
+        $res.addEventListener('click', () => {
+          this.ctrl.click(moveView);
+        });
+
+      });
+
+      return v$res;
     }
   }
 
@@ -185,12 +271,26 @@ export default class View {
   }
 
   vBoard({ board: [{line}, ply] }: mt.Board): VNode {
-    let bn = this.line?.ply(line, ply);
+    let bn = this.ctrl.line?.ply(line, ply);
+    let fen: tt.Maybe<string>,
+    lastMove: tt.Maybe<string>;
     if (bn && !path.isMakesError(bn)) {
-      return h('div.board', [bn.view.fenAfter]);
-    } else {
-      return h('div.board', 'empty');
+      fen = bn.view.fenAfter;
+      lastMove = bn.view.uci;
     }
+
+    let vBoard = h('div.board');
+
+    this.ctrl.subRecons.sub(() => {
+      ssehC(vBoard.elm as Element, {
+        fen,
+        lastMove
+      });
+    });
+
+    this.vs$board.push(vBoard);
+
+    return vBoard;
   }
 
   vContent({ content }: mt.Content): VNode {
@@ -208,18 +308,50 @@ export default class View {
       }));
   }
 
+  vHover() {
+    let hply = h('div.hover-board', [])
+
+    this.v$hoverBoard = hply;
+
+    this.ctrl.subRecons.sub(() => {
+      ssehC(hply.elm as Element, {});
+      (hply.elm as Element).classList.add('hidden');
+    });
+
+    this.ctrl.busHoverBoard.sub((moveView) => {
+      let $eply = (hply.elm as HTMLElement);
+      if (moveView) {
+        while ($eply.lastElementChild) {
+          $eply.removeChild($eply.lastElementChild);
+        }
+        ssehC($eply, { fen: moveView.fenAfter, lastMove: moveView.uci });
+
+        $eply.classList.remove('hidden');
+      } else {
+        $eply.classList.add('hidden');
+      }
+    });
+
+    return hply;
+  }
+
 
   vMContent(content: tt.Maybe<mt.Content>): VNode {
 
-    let children: VNode;
+    let children: VNode[];
 
     if (content) {
-      children = this.vContent(content);
+      children = [
+        this.vContent(content),
+        this.vHover()
+      ];
     } else {
-      children = h('div.fail', 'Failed to load content.');
+      children = [h('div.fail', 'Failed to load content.')];
     }
 
-    return h('div.escsh', children);
+    this.v$_ = h('div.escsh', children);
+
+    return this.v$_;
   }
 
 }

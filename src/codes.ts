@@ -3,7 +3,7 @@ import { ct, l, f, path } from 'cchheess';
 
 export type ErrMap = Map<ct.Ply, l.LineError | path.MakesError>
 
-export default function codes(mcontent: tt.Maybe<mt.Content>): [ErrMap, tt.Maybe<l.Line>] {
+export function codes(mcontent: tt.Maybe<mt.Content>): [ErrMap, tt.Maybe<l.Line>] {
 
   let errs: ErrMap = new Map();
   let line: tt.Maybe<l.Line>;
@@ -21,7 +21,6 @@ export default function codes(mcontent: tt.Maybe<mt.Content>): [ErrMap, tt.Maybe
     if (line) {
       if (line2S) {
         let err = line.move2(lineS, line2S, sanwc, ply);
-        console.log(lineS, line2S, sanwc, ply, err);
         if (err) {
           errs.set(ply, err);
         }
