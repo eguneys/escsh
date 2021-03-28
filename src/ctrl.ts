@@ -1,46 +1,44 @@
-import { l as cl, path, v as cv } from 'cchheess';
-import { tt, mt } from 'chers';
+import { default as chers, tt, mt } from 'chers';
 import { Config } from './config';
-import chers from 'chers';
-import { ErrMap, codes } from './codes';
-import { Sub, Sub2 } from './util';
+import { Sub } from 'uuu';
+import { line } from 'enil';
 
-const defaultMd = ``;
+export type Hover<A> = {
+  active: boolean,
+  hover?: A
+}
 
 export default class Ctrl {
 
   onClick?: (fen: string) => void
-  errs: ErrMap
-  line: tt.Maybe<cl.Line>
-  content: tt.Maybe<mt.Content>
-  subContent = new Sub<tt.Maybe<mt.Content>>(() => this.content)
-  subRecons = new Sub<void>(() => {})
-  busHoverBoard = new Sub2<tt.Maybe<cv.MoveView>>()
+  content: Sub<tt.Maybe<mt.Content>>;
+  hoverBoard: Sub<Hover<line.MoveView>>;
   
   constructor(opts: Config) {
-
     this.onClick = opts.onClick;
 
-    let md = opts.md ? opts.md : defaultMd;
+    let md = opts.md || ``;
 
     let mc = chers(md);
-    this.content = mc;
-    let _ = codes(mc);
-    this.errs = _[0];
-    this.line = _[1];
+    this.content = new Sub<tt.Maybe<mt.Content>>(mc);
+    this.hoverBoard = new Sub<Hover<line.MoveView>>({active: false});
   }
 
-  hover(view: cv.MoveView) {
-    this.busHoverBoard.pub(view);
+  trigger() {
+    this.content.pub();
+  }
+
+  hover(hover: line.MoveView) {
+    this.hoverBoard.pub({active: true, hover});
   }
 
   unHover() {
-    this.busHoverBoard.pub(undefined);
+    this.hoverBoard.pub({active: false});
   }
 
-  click(view: cv.MoveView) {
+  click(view: line.MoveView) {
     if (this.onClick) {
-      this.onClick(view.fenAfter);
+      this.onClick(view.after.fen);
     }
   }
 }

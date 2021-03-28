@@ -1,14 +1,16 @@
-import { l as cl, path } from 'cchheess';
-import { h, VNode } from 'hhh';
+import { h, vh, vmap, vex, VHNode } from 'hhh';
 import { tt, mt } from 'chers';
-import * as codes from './codes';
+import { codes } from './codes';
+import { line } from 'enil';
 import Ctrl from './ctrl';
-import { Sub } from './util';
-import ssehC from 'ssehc';
+import { Sub } from 'uuu';
+import { default as ssehC, api as ssehCApi } from 'ssehc';
 
 type LineAndParent = [mt.Line] | [mt.Line, mt.Line]
 
-export function fTranslateAbs(elm: HTMLElement, pos: [number, number]) {
+type EPos = [number, number];
+
+function fTranslateAbs(elm: HTMLElement, pos: EPos) {
   elm.style.transform = `translate(${pos[0]}px,${pos[1]}px)`;
 }
 
@@ -27,56 +29,55 @@ function listenEndScroll(onEndScroll: () => void) {
   }, false);
 }
 
+type BoardInViewport = {
+  $board?: Node
+}
+
 export default class View {
 
-  v$_!: VNode
-  v$hoverBoard!: VNode
-  vs$board: VNode[]
-  v$visibleBoard!: tt.Maybe<VNode>
   ctrl: Ctrl
+  builderOnContent!: line.Builder
+  hPosToTranslate: Sub<EPos>
+  hBounds: Sub<ClientRect>
+  clientWidth: Sub<number>
+  board$InViewport: Sub<BoardInViewport>
 
-  constructor(ctrl: Ctrl, content: tt.Maybe<mt.Content>){
+  constructor(ctrl: Ctrl){
     this.ctrl = ctrl;
-    this.vs$board = [];
-    this.vMContent(content);
 
-    this.ctrl.subRecons.sub(() => {
-      listenEndScroll(this.findVisiblePly.bind(this));
-      this.findVisiblePly();
-    });
+    let crect = document.body.getBoundingClientRect();
+    this.hPosToTranslate = new Sub<EPos>([-1000, -1000] as EPos);
+    this.hBounds = new Sub<ClientRect>(crect);
+    this.clientWidth = new Sub<number>(0);
+    this.board$InViewport = new Sub<BoardInViewport>({});
   }
 
-  findVisiblePly() {
-    this.v$visibleBoard = this.vs$board
-      .find(_ =>
-        isInViewport((_.elm as HTMLElement).getBoundingClientRect()));
-  }
 
-  vDiv(): VNode {
+  vDiv(): VHNode {
     return h('div');
   }
 
-  vNewline({ newline }: mt.NewLine): VNode {
+  vNewline({ newline }: mt.NewLine): VHNode {
     return h('span.newline');
   }
 
-  vHeadline({ hline }: mt.HLine): VNode {
+  vHeadline({ hline }: mt.HLine): VHNode {
     return h('h2', hline);
   }
 
-  vText({ text }: mt.Text2): VNode {
+  vText({ text }: mt.Text2): VHNode {
     return h('span', text);
   }
 
-  vLine({ line }: mt.Line): VNode {
+  vLine({ line }: mt.Line): VHNode {
     return h('span.line', line);
   }
 
-  vFen({ fen }: mt.Fen): VNode {
+  vFen({ fen }: mt.Fen): VHNode {
     return h('span.fen', fen);
   }
 
-  vLineAndFen({ lineAndFen }: mt.LineAndFen): Array<VNode> {
+  vLineAndFen({ lineAndFen }: mt.LineAndFen): Array<VHNode> {
     return [this.vFen(lineAndFen[1])];
   }
 
@@ -86,19 +87,19 @@ export default class View {
     return Math.ceil(ply / 2) + (ply% 2 === 1 ? '.' : '...');
   }
 
-  vOneTurn({ oneturn } : mt.OneTurn): VNode {
+  vOneTurn({ oneturn } : mt.OneTurn): VHNode {
     return h('strong.oneturn', this.plyToShowTurn(oneturn));
   }
 
-  vZeroTurn({ zeroturn } : mt.ZeroTurn): VNode {
+  vZeroTurn({ zeroturn } : mt.ZeroTurn): VHNode {
     return h('strong.zeroturn', this.plyToShowTurn(zeroturn));
   }
 
-  vGlyphs({ moveGlyph, posGlyph, obsGlyph }: mt.MPOGlyphs): VNode {
+  vGlyphs({ moveGlyph, posGlyph, obsGlyph }: mt.MPOGlyphs): VHNode {
     return h('span.glyphs');
   }
 
-  vSan(sanWithCastles: mt.SanWithCastles): VNode {
+  vSan(sanWithCastles: mt.SanWithCastles): VHNode {
     if (typeof sanWithCastles === 'string') {
       return this.vSanString(sanWithCastles);
     } else {
@@ -106,108 +107,23 @@ export default class View {
     }
   }
 
-  vSanString(san: string): VNode {
+  vSanString(san: string): VHNode {
     return h('span.san', san);
   }
 
-  vMove(ply: number, { move }: mt.Move, lp: LineAndParent): VNode {
-    let bn = this.ctrl.line?.ply(lp[0].line, ply);
-    let err = this.ctrl.errs.get(ply);
-
-    if (!bn) {
-      let _err = err ? err : 'No initial situation';
-      return h('span.move', {
-               attrs: {
-                 'data-error': _err,
-                 'title': _err
-               }
-      },
-               [this.vSan(move[0]),
-                this.vGlyphs(move[1])]);      
-    }
-
-    if (path.isMakesError(bn)) {
-      if (!err) {
-        err = bn;
-      }
-      return h('span.move', {
-        attrs: {
-          'data-error': err,
-          'title': err
-        }
-      },
-               [this.vSan(move[0]),
-                this.vGlyphs(move[1])]);
-
-    } else {
-      let v$res = h('span.move',
-                  [this.vSanString(bn.view.san),
-                   this.vGlyphs(move[1])]);
-
-      let moveView = bn.view;
-
-      this.ctrl.subRecons.sub(() => {
-        let $res = v$res.elm as HTMLElement,
-        $hoverBoard = this.v$hoverBoard.elm as HTMLElement,
-        $_ = this.v$_.elm as HTMLElement;
-
-        ['mouseover', 'touchstart'].forEach(_ => {
-          $res.addEventListener(_, () => {
-
-            let posToTranslate: [number, number] = 
-              [window.pageXOffset, window.pageYOffset];
-
-            if (this.v$visibleBoard) {
-              let bounds = (this.v$visibleBoard.elm as HTMLElement)
-                             .getBoundingClientRect();
-              posToTranslate[0] += bounds.left;
-              posToTranslate[1] += bounds.top;
-            } else {
-              let { clientWidth } = $_;
-
-              let offBounds = $res.getBoundingClientRect();
-              let helBounds = $hoverBoard.getBoundingClientRect();
-
-              if (offBounds.left < clientWidth / 2) {
-                posToTranslate[0] += clientWidth - helBounds.width - 4;
-              }
-            }
-
-            fTranslateAbs($hoverBoard, posToTranslate);
-            
-            this.ctrl.hover(moveView);
-            
-          });
-        });
-        ['mouseleave', 'touchend'].forEach(_ => {
-          $res.addEventListener(_, () => {
-            this.ctrl.unHover();
-          });
-        });
-
-        $res.addEventListener('click', () => {
-          this.ctrl.click(moveView);
-        });
-
-      });
-
-      return v$res;
-    }
-  }
-
-  vCMove({ cmove }: mt.ContinueMove, lp: LineAndParent): VNode {
+  vCMove({ cmove }: mt.ContinueMove, lp: LineAndParent): VHNode {
     return h('span.cmove', [this.vOneTurn(cmove[0]),
                             this.vMove(oTurn2Ply(cmove[0]), cmove[1], lp)]);
   }
 
-  vOneMove({ omove }: mt.OneMove, lp: LineAndParent): VNode {
+  vOneMove({ omove }: mt.OneMove, lp: LineAndParent): VHNode {
     return h('span.omove', [
       this.vZeroTurn(omove[0]),
       this.vMove(zTurn2Ply(omove[0]), omove[1], lp)
     ]);
   }
 
-  vTwoMove({ tmove }: mt.TwoMove, lp: LineAndParent): VNode {
+  vTwoMove({ tmove }: mt.TwoMove, lp: LineAndParent): VHNode {
     return h('span.tmove', [
       this.vOneMove(tmove[0], lp),
       this.vMove(zTurn2Ply(tmove[0].omove[0]) + 1, tmove[1], lp)
@@ -216,7 +132,7 @@ export default class View {
 
   vMoves({ continueMove, twoMoves, oneMove }: mt.Moves, 
          line: mt.Line,
-         pline?: mt.Line): Array<VNode> {
+         pline?: mt.Line): Array<VHNode> {
 
     let lp: LineAndParent = pline ? [line, pline] : [line];
 
@@ -238,15 +154,15 @@ export default class View {
     return children;
   }
 
-  vLineAndMoves({ lineAndMoves }: mt.LineAndMoves): Array<VNode> {
+  vLineAndMoves({ lineAndMoves }: mt.LineAndMoves): Array<VHNode> {
     return this.vMoves(lineAndMoves[1], lineAndMoves[0]);
   }
 
-  vLineLineMoves({ linelineMoves }: mt.LineLineMoves): Array<VNode> {
+  vLineLineMoves({ linelineMoves }: mt.LineLineMoves): Array<VHNode> {
     return this.vMoves(linelineMoves[2], linelineMoves[0], linelineMoves[1])
   }
 
-  vCode(code: mt.Code): Array<VNode> {
+  vCode(code: mt.Code): Array<VHNode> {
     if (mt.isLineAndFen(code)) {
       return this.vLineAndFen(code);
     } else if (mt.isLineLineMoves(code)) {
@@ -256,13 +172,13 @@ export default class View {
     }
   }
 
-  vParagraph({ paragraph }: mt.Paragraph): VNode {
+  vParagraph({ paragraph }: mt.Paragraph): VHNode {
 
     let children = paragraph.flatMap(_ => {
       if (mt.isText(_)) {
         return this.vText(_);
       } else {
-        return this.vCode(_).flatMap(_ => [_, ' ']) as VNode[];
+        return this.vCode(_).flatMap(_ => [_, ' ']);
       }
     });
 
@@ -270,31 +186,56 @@ export default class View {
 
   }
 
-  vBoard({ board: [{line}, ply] }: mt.Board): VNode {
-    let bn = this.ctrl.line?.ply(line, ply);
-    let fen: tt.Maybe<string>,
-    lastMove: tt.Maybe<string>;
-    if (bn && !path.isMakesError(bn)) {
-      fen = bn.view.fenAfter;
-      lastMove = bn.view.uci;
+  vBoard({ board: [{line}, ply] }: mt.Board) {
+
+    let _fen: string,
+    _lastMove: string;
+
+    if (ply === '0') {
+      let view = this.builderOnContent.zeroPly(line);
+
+      if (view) {
+        _fen = view.fen;
+      }
+    } else {
+      let view = this.builderOnContent.plyMove(line, parseInt(ply));
+
+      if (view) {
+        _fen = view.after.fen;
+        _lastMove = view.san;
+      }
     }
 
-    let vBoard = h('div.board');
-
-    this.ctrl.subRecons.sub(() => {
-      ssehC(vBoard.elm as Element, {
-        fen,
-        lastMove
-      });
-    });
-
-    this.vs$board.push(vBoard);
+    let vBoard = vh('div.board', {}, {
+      element: () => (_$: Node) => {
+        const findInViewport = () => {
+          let bounds = (_$ as Element).getBoundingClientRect();
+          if (isInViewport(bounds)) {
+            this.board$InViewport.pub({
+              $board: _$
+            });
+          } else {
+            if (this.board$InViewport.currentValue.$board === _$) {
+              this.board$InViewport.pub({});
+            }
+          }
+        }
+        ssehC(_$ as Element, {
+          fen: _fen,
+          lastMove: _lastMove
+        });
+        listenEndScroll(findInViewport);
+        findInViewport();
+      }
+    }, []);
 
     return vBoard;
   }
 
-  vContent({ content }: mt.Content): VNode {
-    return h('div.content', content
+  vContent(mcontent: mt.Content) {
+    this.builderOnContent = codes(mcontent);
+
+    return h('div.content', mcontent.content
       .map(_ => {
         if (mt.isNewline(_)) {
           return this.vNewline(_);
@@ -308,50 +249,148 @@ export default class View {
       }));
   }
 
-  vHover() {
-    let hply = h('div.hover-board', [])
 
-    this.v$hoverBoard = hply;
+  addListenersVMove(_$: Element, __move: line.MoveView, ctx: any) {
+    ['mouseover', 'touchstart'].forEach(_ => {
+      _$.addEventListener(_, () => {
 
-    this.ctrl.subRecons.sub(() => {
-      ssehC(hply.elm as Element, {});
-      (hply.elm as Element).classList.add('hidden');
-    });
+        let posToTranslate: [number, number] = 
+          [window.pageXOffset, window.pageYOffset];
 
-    this.ctrl.busHoverBoard.sub((moveView) => {
-      let $eply = (hply.elm as HTMLElement);
-      if (moveView) {
-        while ($eply.lastElementChild) {
-          $eply.removeChild($eply.lastElementChild);
+        if (ctx.board$InViewport) {
+          let bounds = ctx.board$InViewport.getBoundingClientRect();
+          posToTranslate[0] += bounds.left;
+          posToTranslate[1] += bounds.top;
+        } else {
+          let { clientWidth } = ctx;
+
+          let offBounds = _$.getBoundingClientRect();
+          if (offBounds.left < clientWidth / 2) {
+            posToTranslate[0] += clientWidth - ctx.hBounds.width - 4;
+          }
         }
-        ssehC($eply, { fen: moveView.fenAfter, lastMove: moveView.uci });
 
-        $eply.classList.remove('hidden');
-      } else {
-        $eply.classList.add('hidden');
-      }
+        this.hPosToTranslate.pub(posToTranslate);
+
+        this.ctrl.hover(__move);
+      });
     });
+    
+    ['mouseleave', 'touchend'].forEach(_ => {
+      _$.addEventListener(_, () => {
+        this.ctrl.unHover();
+      });
+    });
+    
 
-    return hply;
+    _$.addEventListener('click', () => {
+      this.ctrl.click(__move);
+    })
+
+    return (_ctx: any) => {
+      ctx = _ctx;
+    };
+  }
+
+  vMove(ply: number, { move }: mt.Move, lp: LineAndParent): VHNode {
+    let _move = this.builderOnContent.plyMove(lp[0].line, ply);
+    let errs = this.builderOnContent.plyErr(lp[0].line, ply);
+
+    if (_move) {
+      let listenersUpdateCtx: (_: any) => void;
+
+      let __move = _move;
+      let v$move = vh('span.move', {}, {
+        element: (props) => (elm: Node) => {
+          let _$: Element = elm as Element;
+          if (!listenersUpdateCtx) {
+            listenersUpdateCtx = this.addListenersVMove(_$, __move, props);
+          } else {
+            listenersUpdateCtx(props);
+          }
+
+        }
+      },
+                [this.vSanString(_move.san),
+                 this.vGlyphs(move[1])]);
+
+      let ctx: any = {}
+
+      this.board$InViewport.sub(board$InViewport => {
+        ctx.board$InViewport = board$InViewport.$board;
+        v$move.updateParentProp(ctx);
+      });
+
+      this.hBounds.sub(hBounds => {
+        ctx.hBounds = hBounds; 
+        v$move.updateParentProp(ctx)
+      });
+      this.clientWidth.sub(clientWidth => {
+        ctx.clientWidth = clientWidth;
+        v$move.updateParentProp(ctx)
+      });
+
+      return v$move;
+
+    } else {
+      return h('span.move', [this.vSan(move[0]),
+                             this.vGlyphs(move[1])]);               
+    }
+  }
+
+  vHover() {
+    let ssApi: ssehCApi | undefined;
+
+    let v$h = vh('div.hover-board', {}, {
+      resize: (rect) => this.hBounds.pub(rect),
+      klassList: ({ active }) => active?[]:['hidden'],
+      element: ({ active, hover, posToTranslate }) => (elm: Node) => {
+        let _elm: Element = elm as Element;
+        fTranslateAbs(_elm as HTMLElement, posToTranslate);
+        if (active) {
+          if (ssApi) {
+            ssApi.fen(hover.after.fen);
+            ssApi.lastMove(hover.uci);
+          } else {
+            ssApi = ssehC(_elm, { 
+              fen: hover.after.fen,
+              lastMove: hover.uci
+            });
+          }
+        }
+      }
+    }, [], { posToTranslate: [-1000, -1000] });
+
+    this.ctrl.hoverBoard.sub(_ => v$h.update(_));
+
+    this.hPosToTranslate.sub(posToTranslate => v$h.updateParentProp({posToTranslate}));
+
+    return v$h;
   }
 
 
-  vMContent(content: tt.Maybe<mt.Content>): VNode {
+  vApp() {
 
-    let children: VNode[];
+    let v$children = vex([]);
 
-    if (content) {
-      children = [
-        this.vContent(content),
-        this.vHover()
-      ];
-    } else {
-      children = [h('div.fail', 'Failed to load content.')];
-    }
+    this.ctrl.content.sub(mcontent => {
+      let children = [];
+      if (mcontent) {
+        children = [
+          this.vContent(mcontent),
+          this.vHover()
+        ];
+      } else {
+        children = [h('div.fail', 'Failed to load content.')];
+      }
+      
+      v$children.replace(children);
+    });
 
-    this.v$_ = h('div.escsh', children);
 
-    return this.v$_;
+    return vh('div.escsh', {}, {
+      resize: (rect) => this.clientWidth.pub(rect.width)
+    }, [v$children]);
   }
 
 }
