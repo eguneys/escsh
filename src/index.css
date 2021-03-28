@@ -1,6 +1,5 @@
 .hover-board, .board {
   position: relative;
-  width: 60vmin;
-  height: 0;
-  padding-bottom: 60vmin;
+  width: calc(50vw - 20px);
+  aspect-ratio: 1/1;
 }

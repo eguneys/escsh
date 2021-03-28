@@ -39,7 +39,7 @@ export function codes(mcontent: mt.Content) {
     if (oneMove) {
       let { omove } = oneMove;
       let [{zeroturn},move] = omove;
-      codeMove(parseInt(zeroturn), move, lineS);
+      codeMove(parseInt(zeroturn), move, lineS, useLine2SOnce);
     }
   }
 

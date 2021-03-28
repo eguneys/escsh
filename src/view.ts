@@ -206,26 +206,39 @@ export default class View {
       }
     }
 
-    let vBoard = vh('div.board', {}, {
-      element: () => (_$: Node) => {
-        const findInViewport = () => {
-          let bounds = (_$ as Element).getBoundingClientRect();
-          if (isInViewport(bounds)) {
-            this.board$InViewport.pub({
-              $board: _$
-            });
-          } else {
-            if (this.board$InViewport.currentValue.$board === _$) {
-              this.board$InViewport.pub({});
-            }
+    const bindBoardListeners = (_$: Node) => {
+      const findInViewport = () => {
+        let bounds = (_$ as Element).getBoundingClientRect();
+        if (isInViewport(bounds)) {
+          this.board$InViewport.pub({
+            $board: _$
+          });
+        } else {
+          if (this.board$InViewport.currentValue.$board === _$) {
+            this.board$InViewport.pub({});
           }
         }
+      }
+      listenEndScroll(findInViewport);
+
+
+      return findInViewport;
+    }
+
+    let boundListeners: any;
+
+    let vBoard = vh('div.board', {}, {
+      resize: (bounds, _$) => {
+        if (!boundListeners) {
+          boundListeners = bindBoardListeners(_$);
+        }
+        boundListeners();
+      },
+      element: () => (_$: Node) => {
         ssehC(_$ as Element, {
           fen: _fen,
           lastMove: _lastMove
         });
-        listenEndScroll(findInViewport);
-        findInViewport();
       }
     }, []);
 
@@ -296,11 +309,23 @@ export default class View {
     let _move = this.builderOnContent.plyMove(lp[0].line, ply);
     let errs = this.builderOnContent.plyErr(lp[0].line, ply);
 
+    const attributes = () => {
+      let res: any = {};
+
+      if (errs.length > 0) {
+        res['data-error'] = errs[0];
+        res['title'] = errs[0];
+      }
+
+      return res;
+    };
+
     if (_move) {
       let listenersUpdateCtx: (_: any) => void;
 
       let __move = _move;
       let v$move = vh('span.move', {}, {
+        attrs: (props) => (attributes()),
         element: (props) => (elm: Node) => {
           let _$: Element = elm as Element;
           if (!listenersUpdateCtx) {
@@ -333,8 +358,10 @@ export default class View {
       return v$move;
 
     } else {
-      return h('span.move', [this.vSan(move[0]),
-                             this.vGlyphs(move[1])]);               
+      return vh('span.move', {}, {
+        attrs: (props) => (attributes()),
+      }, [this.vSan(move[0]),
+          this.vGlyphs(move[1])]);               
     }
   }
 
