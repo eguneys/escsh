@@ -24,6 +24,12 @@ export default class Ctrl {
     this.hoverBoard = new Sub<Hover<line.MoveView>>({active: false});
   }
 
+  md(md: string) {
+    let mc = chers(md);
+
+    this.content.pub(mc);
+  }
+
   trigger() {
     this.content.pub();
   }

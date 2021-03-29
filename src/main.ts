@@ -5,6 +5,7 @@ import { h, vinit } from 'hhh';
 import { Config } from './config';
 import View from './view';
 import Ctrl from './ctrl';
+import Api from './api';
 
 export default function app(element: Element, opts: Config) {
 
@@ -17,4 +18,6 @@ export default function app(element: Element, opts: Config) {
   
   ctrl.trigger();
   element.appendChild($_);
+
+  return new Api(ctrl);
 }
