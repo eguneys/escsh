@@ -21,9 +21,21 @@ function isInViewport(bounds: ClientRect) {
     bounds.right <= window.innerWidth;
 }
 
-function listenEndScroll(onEndScroll: () => void) {
+// https://stackoverflow.com/questions/35939886/find-first-scrollable-parent
+function getScrollParent(node: Node | null): Node | null {
+  if (node == null) {
+    return null;
+  }
+  if ((node as Element).scrollHeight > (node as Element).clientHeight) {
+    return node;
+  } else {
+    return getScrollParent(node.parentNode);
+  }
+}
+
+function listenEndScroll(_$: Element, onEndScroll: () => void) {
   let isScrolling: number;
-  document.addEventListener('scroll', function(event) {
+  getScrollParent(_$)?.addEventListener('scroll', function(event) {
     clearTimeout(isScrolling);
     isScrolling = window.setTimeout(() => onEndScroll(), 60);
   }, false);
@@ -39,7 +51,7 @@ export default class View {
   builderOnContent!: line.Builder
   hPosToTranslate: Sub<EPos>
   hBounds: Sub<ClientRect>
-  clientWidth: Sub<number>
+  es$: Sub<Node>
   board$InViewport: Sub<BoardInViewport>
 
   constructor(ctrl: Ctrl){
@@ -48,7 +60,7 @@ export default class View {
     let crect = document.body.getBoundingClientRect();
     this.hPosToTranslate = new Sub<EPos>([-1000, -1000] as EPos);
     this.hBounds = new Sub<ClientRect>(crect);
-    this.clientWidth = new Sub<number>(0);
+    this.es$ = new Sub<Node>(document.body);
     this.board$InViewport = new Sub<BoardInViewport>({});
   }
 
@@ -202,7 +214,7 @@ export default class View {
 
       if (view) {
         _fen = view.after.fen;
-        _lastMove = view.san;
+        _lastMove = view.uci;
       }
     }
 
@@ -219,7 +231,7 @@ export default class View {
           }
         }
       }
-      listenEndScroll(findInViewport);
+      listenEndScroll(_$ as Element, findInViewport);
 
 
       return findInViewport;
@@ -266,20 +278,20 @@ export default class View {
   addListenersVMove(_$: Element, __move: line.MoveView, ctx: any) {
     ['mouseover', 'touchstart'].forEach(_ => {
       _$.addEventListener(_, () => {
+        let { es$ } = ctx;
+        let esBounds = es$.getBoundingClientRect();
 
         let posToTranslate: [number, number] = 
           [window.pageXOffset, window.pageYOffset];
 
         if (ctx.board$InViewport) {
           let bounds = ctx.board$InViewport.getBoundingClientRect();
-          posToTranslate[0] += bounds.left;
-          posToTranslate[1] += bounds.top;
+          posToTranslate[0] = bounds.left - esBounds.left;
+          posToTranslate[1] = bounds.top - esBounds.top;
         } else {
-          let { clientWidth } = ctx;
-
           let offBounds = _$.getBoundingClientRect();
-          if (offBounds.left < clientWidth / 2) {
-            posToTranslate[0] += clientWidth - ctx.hBounds.width - 4;
+          if (offBounds.left - esBounds.left < esBounds.width / 2) {
+            posToTranslate[0] += esBounds.width - ctx.hBounds.width - 4;
           }
         }
 
@@ -339,7 +351,9 @@ export default class View {
                 [this.vSanString(_move.san),
                  this.vGlyphs(move[1])]);
 
-      let ctx: any = {}
+      let ctx: any = {
+        es$: this.es$.currentValue
+      }
 
       this.board$InViewport.sub(board$InViewport => {
         ctx.board$InViewport = board$InViewport.$board;
@@ -350,8 +364,8 @@ export default class View {
         ctx.hBounds = hBounds; 
         v$move.updateParentProp(ctx)
       });
-      this.clientWidth.sub(clientWidth => {
-        ctx.clientWidth = clientWidth;
+      this.es$.sub(es$ => {
+        ctx.es$ = es$;
         v$move.updateParentProp(ctx)
       });
 
@@ -416,7 +430,9 @@ export default class View {
 
 
     return vh('div.escsh', {}, {
-      resize: (rect) => this.clientWidth.pub(rect.width)
+      element: () => (_$: Node) => {
+        this.es$.pub(_$);
+      }
     }, [v$children]);
   }
 

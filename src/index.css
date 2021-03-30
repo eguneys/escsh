@@ -1,5 +1,9 @@
+.escsh {
+  position: relative;
+}
+
 .hover-board, .board {
   position: relative;
-  width: calc(50vw - 20px);
+  width: calc(50% - 20px);
   aspect-ratio: 1/1;
 }
